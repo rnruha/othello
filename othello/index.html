@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>オセロ</title>
+  <!-- 外部CSSファイルの読み込み -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- スタート画面 -->
+  <div id="start-screen" class="screen">
+    <h1>othello game</h1>
+    <button onclick="startGame(false)">2人で対戦</button>
+    <button onclick="showCPULevels()">CPUと対戦</button>
+  </div>
+
+  <!-- CPUレベル選択画面 -->
+  <div id="cpu-level-screen" class="screen" style="display: none;">
+    <h1>CPUの強さを選んでください</h1>
+    <button onclick="startGame(true, 'normal')">normal</button>
+    <button onclick="startGame(true, 'hard')">hard</button>
+    <button onclick="startGame(true, 'expert')">expert</button>
+  </div>
+
+  <!-- メッセージ・スコア・盤面など -->
+  <div id="fade-message" class="fade-message" style="display:none"></div>
+  <h2 id="turn-info">黒の番です</h2>
+  <div class="score" id="score-display">黒: 2 | 白: 2</div>
+  <div class="board" id="board"></div>
+  <div id="result"></div>
+  <button id="restart-button" onclick="restartGame()">もう一度</button>
+
+  <!-- 外部JSファイルの読み込み -->
+  <script src="script.js"></script>
+</body>
+</html>
