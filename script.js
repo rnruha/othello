@@ -234,7 +234,7 @@ function cpuTurn() {
   }
 
   if (bestMove) {
-    setTimeout(() => handleClick(bestMove[0], bestMove[1]), 300);
+    setTimeout(() => handleClick(bestMove[0], bestMove[1]), 900);
   }
 }
 
