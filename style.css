@@ -36,7 +36,7 @@ body {
   }
   
   .flipping {
-    animation: diskFlip 0.6s ease;
+    animation: diskFlip 0.8s ease;
   }
   
   .screen {

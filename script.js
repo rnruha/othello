@@ -9,17 +9,18 @@ const fadeMessage = document.getElementById("fade-message");
 
 let currentPlayer = "black";
 let useCPU = false;
+let cpuLevel = "normal";
 const directions = [[0,1],[1,0],[0,-1],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
 let state = [];
+
 
 function showCPULevels() {
   startScreen.style.display = "none";
   cpuLevelScreen.style.display = "flex";
-  cpuLevelScreen.className = "screen";
   cpuLevelScreen.className = startScreen.className;
 }
 
-function startGame(cpuMode, level ) {
+function startGame(cpuMode, level) {
   useCPU = cpuMode;
   cpuLevel = level;
   startScreen.style.display = "none";
@@ -57,7 +58,7 @@ function restartGame() {
   render();
 }
 
-function render() {
+function render(showHighlights = true) {
   board.innerHTML = "";
   const validMoves = getValidMoves(currentPlayer);
 
@@ -68,45 +69,88 @@ function render() {
       cell.dataset.x = x;
       cell.dataset.y = y;
 
-      if (validMoves.some(([vx, vy]) => vx === x && vy === y)) {
+      if (showHighlights && (!useCPU || currentPlayer === "black") && validMoves.some(([vx, vy]) => vx === x && vy === y)) {
         cell.classList.add("highlight");
       }
 
       cell.addEventListener("click", () => {
         if (!useCPU || currentPlayer !== "white") {
-          handleClick(x, y);
+          handlePlayerMove(x, y);
         }
       });
 
       if (state[y][x]) {
         const disk = document.createElement("div");
         disk.className = `disk ${state[y][x]}`;
+        disk.dataset.x = x;
+        disk.dataset.y = y;
         cell.appendChild(disk);
       }
       board.appendChild(cell);
     }
   }
   updateScore();
-  updateTurnInfo(validMoves);
+  turnInfo.textContent = currentPlayer === "black" ? "黒の番です" : "白の番です";
 }
 
-function updateTurnInfo(validMoves) {
+function handlePlayerMove(x, y) {
+  if (state[y][x]) return;
+  const flips = getFlippableDisks(x, y, currentPlayer);
+  if (flips.length === 0) return;
+
+  state[y][x] = currentPlayer;
+
+  const flipSet = new Set(flips.map(([fx, fy]) => `${fx},${fy}`));
+
+  clearHighlights();
+  render(false);
+
+  setTimeout(() => {
+    for (const [fx, fy] of flips) {
+      const cellIndex = fy * 8 + fx;
+      const cell = board.children[cellIndex];
+      const oldDisk = cell.querySelector('.disk');
+      if (oldDisk && flipSet.has(`${fx},${fy}`)) {
+        flipDisk(oldDisk, currentPlayer);
+        state[fy][fx] = currentPlayer;
+      }
+    }
+
+    setTimeout(() => {
+      currentPlayer = currentPlayer === "black" ? "white" : "black";
+      render();
+      updateTurn();
+    }, 800);
+  }, 200);
+}
+
+function clearHighlights() {
+  const highlighted = document.querySelectorAll('.highlight');
+  highlighted.forEach(cell => cell.classList.remove('highlight'));
+}
+
+// ... その他の関数は変更なし ...
+
+
+
+function updateTurn() {
+  const validMoves = getValidMoves(currentPlayer);
   if (validMoves.length === 0) {
     const opponent = currentPlayer === "black" ? "white" : "black";
     const opponentMoves = getValidMoves(opponent);
     if (opponentMoves.length > 0) {
-      turnInfo.textContent = `${currentPlayer === "black" ? "黒" : "白"}はパスされました`;
+      showFadeMessage(`${currentPlayer === "black" ? "黒" : "白"}はパスされました`);
+      currentPlayer = opponent;
       setTimeout(() => {
-        currentPlayer = opponent;
         render();
+        updateTurn();
       }, 1000);
     } else {
       showResult();
     }
   } else {
-    turnInfo.textContent = currentPlayer === "black" ? "黒の番です" : "白の番です";
     if (useCPU && currentPlayer === "white") {
-      setTimeout(() => cpuTurn(), 500);
+      setTimeout(cpuTurn, 500);
     }
   }
 }
@@ -172,25 +216,6 @@ function getFlippableDisks(x, y, player) {
   return toFlip;
 }
 
-function handleClick(x, y) {
-  if (state[y][x]) return;
-  const flips = getFlippableDisks(x, y, currentPlayer);
-  if (flips.length === 0) return;
-
-  state[y][x] = currentPlayer;
-
-  for (const [fx, fy] of flips) {
-    const cellIndex = fy * 8 + fx;
-    const cell = board.children[cellIndex];
-    const oldDisk = cell.querySelector('.disk');
-    if (oldDisk) flipDisk(oldDisk, currentPlayer);
-    state[fy][fx] = currentPlayer;
-  }
-
-  currentPlayer = currentPlayer === "black" ? "white" : "black";
-  render();
-}
-
 function flipDisk(diskElement, newColor) {
   diskElement.classList.add("flipping");
   setTimeout(() => {
@@ -201,21 +226,19 @@ function flipDisk(diskElement, newColor) {
 }
 
 function cpuTurn() {
+  if (!useCPU || currentPlayer !== "white") return;
   const valid = getValidMoves("white");
   if (valid.length === 0) return;
 
   let bestMove;
-
   if (cpuLevel === "normal") {
     bestMove = valid.reduce((best, move) => {
       const [x, y] = move;
       let score = getFlippableDisks(x, y, "white").length;
       if ((x === 0 || x === 7) && (y === 0 || y === 7)) score += 100;
       else if (x === 0 || x === 7 || y === 0 || y === 7) score += 10;
-      score -= countNearbyOpponent(x, y, "white") * 2;
       return score > best.score ? { move, score } : best;
     }, { move: null, score: -Infinity }).move;
-
   } else if (cpuLevel === "hard") {
     bestMove = valid.reduce((best, move) => {
       const [x, y] = move;
@@ -227,28 +250,14 @@ function cpuTurn() {
       const score = getMoveScore(x, y) - opponentMoves * 2;
       return score > best.score ? { move, score } : best;
     }, { move: null, score: -Infinity }).move;
-
   } else if (cpuLevel === "expert") {
-    const decision = minimaxDecision(state, 5, true);
+    const decision = minimaxDecision(copyState(state), 5, true);
     bestMove = decision.move;
   }
 
   if (bestMove) {
-    setTimeout(() => handleClick(bestMove[0], bestMove[1]), 1000);
+    handlePlayerMove(bestMove[0], bestMove[1]);
   }
-}
-
-function countNearbyOpponent(x, y, player) {
-  const opponent = player === "black" ? "white" : "black";
-  let count = 0;
-  for (const [dx, dy] of directions) {
-    const nx = x + dx;
-    const ny = y + dy;
-    if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
-      if (state[ny][nx] === opponent) count++;
-    }
-  }
-  return count;
 }
 
 function copyState(original) {
@@ -286,6 +295,13 @@ function getFlippableDisksFromState(boardState, x, y, player) {
   return toFlip;
 }
 
+function getMoveScore(x, y) {
+  let score = getFlippableDisksFromState(state, x, y, "white").length;
+  if ((x === 0 || x === 7) && (y === 0 || y === 7)) score += 100;
+  else if (x === 0 || x === 7 || y === 0 || y === 7) score += 10;
+  return score;
+}
+
 function minimaxDecision(state, depth, maximizing) {
   const validMoves = getValidMovesFromState(state, "white");
   let bestScore = -Infinity;
@@ -321,43 +337,22 @@ function minimax(state, depth, maximizing) {
   return maximizing ? Math.max(...scores) : Math.min(...scores);
 }
 
-function getMoveScore(x, y) {
-  let score = getFlippableDisks(x, y, "white").length;
-  if ((x === 0 || x === 7) && (y === 0 || y === 7)) score += 100;
-  else if (x === 0 || x === 7 || y === 0 || y === 7) score += 10;
-  return score;
-}
-
 function evaluate(state) {
   let score = 0;
   for (let y = 0; y < 8; y++) {
     for (let x = 0; x < 8; x++) {
       const cell = state[y][x];
       let value = 0;
-
-      // 角：超高評価
       if ((x === 0 || x === 7) && (y === 0 || y === 7)) value = 100;
-
-      // X打ち：角の斜め → 最悪手
       else if ((x === 1 || x === 6) && (y === 1 || y === 6)) value = -50;
-
-      // 辺：まあまあ評価
       else if (x === 0 || x === 7 || y === 0 || y === 7) value = 10;
-
-      // 他：通常評価
       else value = 1;
-
-      // スコア加算
       if (cell === "white") score += value;
       else if (cell === "black") score -= value;
     }
   }
   return score;
 }
-
-
-
-
 
 window.onload = () => {
   initializeBoard();
